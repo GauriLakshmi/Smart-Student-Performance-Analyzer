@@ -1,10 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-import pandas as pd
 from PIL import Image, ImageTk
-
-from models import Student, Analyzer
-from graphs import plot_subject_avg, plot_pass_fail, plot_student_trend
+import os
 
 # 🎨 COLORS
 BG = "#0f172a"
@@ -12,208 +9,252 @@ CARD = "#1e293b"
 BTN1 = "#22c55e"
 BTN2 = "#3b82f6"
 BTN3 = "#a855f7"
+BTN4 = "#f59e0b"
 TEXT = "#e2e8f0"
 ACCENT = "#38bdf8"
 
-students = []
+class StudentAnalyzerApp:
+    def __init__(self, root, controller=None):
+        self.root = root
+        self.controller = controller
+        self.root.title("Student Performance Analyzer")
+        
+        # 📏 WINDOW CONFIG
+        self.root.geometry("1100x900")
+        self.root.minsize(950, 750)
+        self.root.configure(bg=BG)
 
-# ➕ Add student
-def add_student():
-    name = entry_name.get()
-    try:
-        math = int(entry_math.get())
-        cs = int(entry_cs.get())
-        physics = int(entry_physics.get())
-    except:
-        messagebox.showerror("Error", "Invalid marks")
-        return
+        # Track dynamic subject rows: list of (subject_entry, marks_entry) tuples
+        self.subject_rows = []
 
-    s = Student(name, {"Math": math, "CS": cs, "Physics": physics})
-    students.append(s)
+        self.setup_ui()
 
-    table.insert("", "end", values=(name, math, cs, physics, round(s.average, 2)))
+    def setup_ui(self):
+        # 🔥 MAIN CONTAINER
+        self.main_container = tk.Frame(self.root, bg=BG)
+        self.main_container.pack(fill="both", expand=True)
 
-# 📂 Load CSV
-def load_csv():
-    file = filedialog.askopenfilename(filetypes=[("CSV Files", "*.csv")])
-    if not file:
-        return
+        # 🔥 SCROLLABLE CANVAS
+        self.canvas = tk.Canvas(self.main_container, bg=BG, highlightthickness=0)
+        self.scrollbar = tk.Scrollbar(self.main_container, orient="vertical", command=self.canvas.yview)
+        
+        self.scrollable_frame = tk.Frame(self.canvas, bg=BG)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
 
-    df = pd.read_csv(file)
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        
+        def on_canvas_configure(event):
+            self.canvas.itemconfig(self.canvas_window, width=event.width)
 
-    for _, row in df.iterrows():
-        s = Student(row["Name"], {
-            "Math": row["Math"],
-            "CS": row["CS"],
-            "Physics": row["Physics"]
-        })
-        students.append(s)
+        self.canvas.bind("<Configure>", on_canvas_configure)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        table.insert("", "end", values=(
-            row["Name"], row["Math"], row["CS"], row["Physics"], round(s.average, 2)
-        ))
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
 
-# 📊 Analyze
-def analyze():
-    if not students:
-        return
+        # 🖱️ Scroll Bind
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
-    analyzer = Analyzer(students)
-    results = analyzer.get_full_analysis()
+        # --- CONTENT ---
+        self.content_holder = tk.Frame(self.scrollable_frame, bg=BG)
+        self.content_holder.pack(pady=20, fill="x", expand=True)
 
-    topper = results["topper"]
-    p, f = results["pass_fail"]
+        # 🔥 TITLE
+        tk.Label(self.content_holder, text="📊 Smart Student Performance Analyzer", font=("Segoe UI", 26, "bold"), bg=BG, fg=ACCENT).pack(pady=(10, 30))
 
-    messagebox.showinfo("Analysis", f"Topper: {topper}\nPass: {p}\nFail: {f}")
+        # 📥 INPUT SECTION (Dynamic Manual Entry)
+        tk.Label(self.content_holder, text="👤 Step 1: Add Student Details", font=("Segoe UI", 16, "bold"), bg=BG, fg=TEXT).pack(pady=5)
+        
+        self.input_card = tk.Frame(self.content_holder, bg=CARD, padx=30, pady=30, relief="flat")
+        self.input_card.pack(pady=10, padx=80, fill="x")
 
-# 📈 Show Graph
-def show_graph(graph_type):
-    if not students:
-        return
+        # 🏷️ NAME ROW - NOW PROPERLY ALIGNED
+        name_container = tk.Frame(self.input_card, bg=CARD)
+        name_container.pack(fill="x", pady=(0, 20))
+        
+        tk.Label(name_container, text="Full Name:", bg=CARD, fg=TEXT, font=("Segoe UI", 12, "bold"), width=12, anchor="w").pack(side="left", padx=(5, 10))
+        self.entry_name = tk.Entry(name_container, font=("Segoe UI", 12), width=40)
+        self.entry_name.pack(side="left", fill="x", expand=True)
 
-    analyzer = Analyzer(students)
-    results = analyzer.get_full_analysis()
+        # 📝 SUBJECTS AREA
+        self.subjects_container = tk.Frame(self.input_card, bg=CARD)
+        self.subjects_container.pack(fill="x")
 
-    if graph_type == "subject":
-        plot_subject_avg(results["subject_avg"])
-        file = "subject_avg.png"
+        # ➕ ADD SUBJECT BUTTON
+        self.add_sub_btn = tk.Button(self.input_card, text="➕ Add Subject Entry", bg="#475569", fg="white", 
+                                    font=("Segoe UI", 10, "bold"), command=self.add_subject_row, 
+                                    padx=10, pady=5, relief="flat", cursor="hand2")
+        self.add_sub_btn.pack(pady=15)
 
-    elif graph_type == "pass":
-        plot_pass_fail(*results["pass_fail"])
-        file = "pass_fail.png"
+        # 🔘 CONTROL BUTTONS
+        btn_frame = tk.Frame(self.content_holder, bg=BG)
+        btn_frame.pack(pady=30)
 
-    elif graph_type == "trend":
-        plot_student_trend(results["student_avgs"])
-        file = "student_trend.png"
+        self.styled_btn(btn_frame, "✅ Confirm & Add Student", BTN1, self.on_add_student).grid(row=0, column=0, padx=10)
+        self.styled_btn(btn_frame, "📂 Load CSV File", BTN3, self.on_load_csv).grid(row=0, column=1, padx=10)
+        self.styled_btn(btn_frame, "📊 View Analysis", BTN2, self.on_analyze).grid(row=0, column=2, padx=10)
+        self.styled_btn(btn_frame, "💾 Export Data", BTN4, self.on_export).grid(row=0, column=3, padx=10)
 
-    img = Image.open(file).resize((520, 300))
-    img_tk = ImageTk.PhotoImage(img)
+        # 📋 TABLE
+        self.setup_table_style()
+        tk.Label(self.content_holder, text="📋 Step 2: Student Marks List", font=("Segoe UI", 16, "bold"), bg=BG, fg=TEXT).pack(pady=(20, 5))
+        
+        self.table_container = tk.Frame(self.content_holder, bg=BG)
+        self.table_container.pack(pady=10, padx=50, fill="x")
 
-    graph_label.config(image=img_tk)
-    graph_label.image = img_tk
+        self.table = ttk.Treeview(self.table_container, columns=("Name", "Avg"), show="headings", height=8)
+        self.update_table_headers()
+        self.table.pack(fill="x")
 
+        # 📈 VISUALS
+        tk.Label(self.content_holder, text="📈 Step 3: Performance Insights", font=("Segoe UI", 16, "bold"), bg=BG, fg=TEXT).pack(pady=(40, 10))
 
-# 🖥️ ROOT
-root = tk.Tk()
-root.title("Student Analyzer Dashboard")
-root.geometry("950x700")
-root.configure(bg=BG)
+        graph_btn_frame = tk.Frame(self.content_holder, bg=BG)
+        graph_btn_frame.pack(pady=10)
 
-# 🔥 SCROLLABLE PAGE
-canvas = tk.Canvas(root, bg=BG, highlightthickness=0)
-scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
+        self.styled_btn(graph_btn_frame, "📊 Subject Avg", "#f59e0b", lambda: self.on_show_graph("subject")).grid(row=0, column=0, padx=10)
+        self.styled_btn(graph_btn_frame, "🥧 Pass/Fail", "#ef4444", lambda: self.on_show_graph("pass")).grid(row=0, column=1, padx=10)
+        self.styled_btn(graph_btn_frame, "📈 Trend", "#10b981", lambda: self.on_show_graph("trend")).grid(row=0, column=2, padx=10)
 
-scrollable_frame = tk.Frame(canvas, bg=BG)
+        self.graph_display_card = tk.Frame(self.content_holder, bg=CARD, padx=10, pady=10)
+        self.graph_display_card.pack(pady=30)
+        
+        self.graph_label = tk.Label(self.graph_display_card, bg=CARD)
+        self.graph_label.pack()
 
-scrollable_frame.bind(
-    "<Configure>",
-    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-)
+    def add_subject_row(self, sub_name="", sub_mark=""):
+        """Adds a new row with Subject Name and Marks entries."""
+        row_frame = tk.Frame(self.subjects_container, bg=CARD)
+        row_frame.pack(fill="x", pady=5)
 
-canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-canvas.configure(yscrollcommand=scrollbar.set)
+        tk.Label(row_frame, text="Subject:", bg=CARD, fg=TEXT, font=("Segoe UI", 12, "bold"), width=12, anchor="w").pack(side="left", padx=(5, 10))
+        sub_entry = tk.Entry(row_frame, font=("Segoe UI", 11), width=20)
+        sub_entry.insert(0, sub_name)
+        sub_entry.pack(side="left", padx=10)
 
-canvas.pack(side="left", fill="both", expand=True)
-scrollbar.pack(side="right", fill="y")
+        tk.Label(row_frame, text="Marks:", bg=CARD, fg=TEXT, font=("Segoe UI", 12, "bold")).pack(side="left", padx=5)
+        mark_entry = tk.Entry(row_frame, font=("Segoe UI", 11), width=10)
+        mark_entry.insert(0, str(sub_mark))
+        mark_entry.pack(side="left", padx=10)
 
-# 🖱️ Smooth scroll
-def _on_mousewheel(event):
-    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        # Delete button for row
+        def remove_row():
+            self.subject_rows.remove((sub_entry, mark_entry))
+            row_frame.destroy()
 
-canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        del_btn = tk.Button(row_frame, text="✕", bg="#ef4444", fg="white", font=("Segoe UI", 8, "bold"), 
+                           command=remove_row, relief="flat", cursor="hand2", padx=5)
+        del_btn.pack(side="left", padx=10)
 
-# 🔥 TITLE
-tk.Label(
-    scrollable_frame,
-    text="📊 Student Performance Dashboard",
-    font=("Segoe UI", 20, "bold"),
-    bg=BG,
-    fg=ACCENT
-).pack(pady=15)
+        self.subject_rows.append((sub_entry, mark_entry))
 
-# 📥 INPUT CARD
-input_frame = tk.Frame(scrollable_frame, bg=CARD, padx=15, pady=15)
-input_frame.pack(pady=10)
+    def setup_table_style(self):
+        self.style = ttk.Style()
+        self.style.theme_use("default")
+        self.style.configure("Treeview", background=CARD, foreground="white", rowheight=35, fieldbackground=CARD, font=("Segoe UI", 10))
+        self.style.configure("Treeview.Heading", background="#2d3748", foreground="white", font=("Segoe UI", 11, "bold"))
+        self.style.map("Treeview", background=[("selected", ACCENT)])
 
-tk.Label(input_frame, text="👤 Name", bg=CARD, fg=TEXT).grid(row=0, column=0, padx=5, pady=5)
-tk.Label(input_frame, text="📘 Math", bg=CARD, fg=TEXT).grid(row=1, column=0, padx=5, pady=5)
-tk.Label(input_frame, text="💻 CS", bg=CARD, fg=TEXT).grid(row=2, column=0, padx=5, pady=5)
-tk.Label(input_frame, text="🔬 Physics", bg=CARD, fg=TEXT).grid(row=3, column=0, padx=5, pady=5)
+    def update_table_headers(self):
+        subjects = self.controller.subjects if self.controller else []
+        self.table_columns = ("Name",) + tuple(subjects) + ("Avg",)
+        self.table["columns"] = self.table_columns
+        for col in self.table_columns:
+            self.table.heading(col, text=col)
+            self.table.column(col, width=120, anchor="center")
 
-entry_name = tk.Entry(input_frame)
-entry_name.grid(row=0, column=1, padx=5, pady=5)
+    def styled_btn(self, parent, text, color, cmd):
+        return tk.Button(parent, text=text, command=cmd, bg=color, fg="white", 
+                        font=("Segoe UI", 11, "bold"), padx=25, pady=10, 
+                        relief="flat", cursor="hand2")
 
-entry_math = tk.Entry(input_frame)
-entry_math.grid(row=1, column=1, padx=5, pady=5)
+    def _on_mousewheel(self, event):
+        self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
-entry_cs = tk.Entry(input_frame)
-entry_cs.grid(row=2, column=1, padx=5, pady=5)
+    def on_add_student(self):
+        name = self.entry_name.get()
+        if not name:
+            messagebox.showwarning("Warning", "Student name is required")
+            return
+        
+        marks = {}
+        new_subjects = []
+        try:
+            for sub_ent, mark_ent in self.subject_rows:
+                sub = sub_ent.get().strip()
+                mark = mark_ent.get().strip()
+                if sub and mark:
+                    marks[sub] = int(mark)
+                    if sub not in self.controller.subjects:
+                        new_subjects.append(sub)
+        except ValueError:
+            messagebox.showerror("Error", "Marks must be numbers")
+            return
 
-entry_physics = tk.Entry(input_frame)
-entry_physics.grid(row=3, column=1, padx=5, pady=5)
+        if not marks:
+            messagebox.showwarning("Warning", "Add at least one subject and marks")
+            return
 
-# 🔘 BUTTON ROW
-btn_frame = tk.Frame(scrollable_frame, bg=BG)
-btn_frame.pack(pady=15)
+        # Update controller subjects if new ones were added manually
+        if new_subjects:
+            self.controller.subjects.extend([s for s in new_subjects if s not in self.controller.subjects])
+            self.update_table_headers()
 
-def styled_btn(parent, text, color, cmd):
-    return tk.Button(
-        parent,
-        text=text,
-        command=cmd,
-        bg=color,
-        fg="white",
-        font=("Segoe UI", 10, "bold"),
-        padx=10,
-        pady=5,
-        relief="flat",
-        cursor="hand2"
-    )
+        s = self.controller.add_manual_student(name, marks)
+        
+        # Refresh table rows to account for possibly new columns
+        self.refresh_table()
+        
+        # Clear entries
+        self.entry_name.delete(0, tk.END)
+        for _, m_ent in self.subject_rows: m_ent.delete(0, tk.END)
 
-styled_btn(btn_frame, "➕ Add Student", BTN1, add_student).grid(row=0, column=0, padx=10)
-styled_btn(btn_frame, "📂 Load CSV", BTN3, load_csv).grid(row=0, column=1, padx=10)
-styled_btn(btn_frame, "📊 Analyze", BTN2, analyze).grid(row=0, column=2, padx=10)
+    def refresh_table(self):
+        for item in self.table.get_children(): self.table.delete(item)
+        for s in self.controller.students:
+            row = [s.name] + [s.marks.get(sub, 0) for sub in self.controller.subjects] + [round(s.average, 2)]
+            self.table.insert("", "end", values=row)
 
-# 📋 TABLE
-style = ttk.Style()
-style.theme_use("default")
+    def on_load_csv(self):
+        path = filedialog.askopenfilename(filetypes=[("CSV", "*.csv")])
+        if not path: return
 
-style.configure("Treeview",
-    background=CARD,
-    foreground="white",
-    rowheight=28,
-    fieldbackground=CARD
-)
+        success, msg = self.controller.process_csv(path)
+        if not success:
+            messagebox.showerror("Error", msg)
+            return
 
-style.map("Treeview", background=[("selected", ACCENT)])
+        # Clear existing dynamic rows and populate with CSV subjects
+        for child in self.subjects_container.winfo_children(): child.destroy()
+        self.subject_rows.clear()
+        for sub in self.controller.subjects:
+            self.add_subject_row(sub_name=sub)
 
-columns = ("Name", "Math", "CS", "Physics", "Avg")
-table = ttk.Treeview(scrollable_frame, columns=columns, show="headings", height=6)
+        self.update_table_headers()
+        self.refresh_table()
+        messagebox.showinfo("Success", msg)
 
-for col in columns:
-    table.heading(col, text=col)
+    def on_analyze(self):
+        res = self.controller.get_analysis_results()
+        if not res: return messagebox.showwarning("Warning", "No data")
 
-table.pack(pady=15)
+        msg = f"🏆 TOPPER: {res['topper'].upper()}\n📉 LOWEST: {res['lowest'].upper()}\n\n✅ PASSED: {res['pass_fail'][0]}\n❌ FAILED: {res['pass_fail'][1]}"
+        messagebox.showinfo("Analysis Summary", msg)
 
-# 📊 GRAPH TITLE
-tk.Label(
-    scrollable_frame,
-    text="📈 Visual Insights",
-    font=("Segoe UI", 14, "bold"),
-    bg=BG,
-    fg=TEXT
-).pack(pady=10)
+    def on_export(self):
+        path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
+        if not path: return
+        if self.controller.export_data(path): messagebox.showinfo("Done", "Exported successfully")
 
-# 📈 GRAPH BUTTONS
-graph_frame = tk.Frame(scrollable_frame, bg=BG)
-graph_frame.pack(pady=10)
-
-styled_btn(graph_frame, "📊 Subject Avg", "#f59e0b", lambda: show_graph("subject")).grid(row=0, column=0, padx=5)
-styled_btn(graph_frame, "🥧 Pass/Fail", "#ef4444", lambda: show_graph("pass")).grid(row=0, column=1, padx=5)
-styled_btn(graph_frame, "📈 Trend", "#10b981", lambda: show_graph("trend")).grid(row=0, column=2, padx=5)
-
-# 🖼️ GRAPH DISPLAY
-graph_label = tk.Label(scrollable_frame, bg=CARD, bd=2, relief="ridge")
-graph_label.pack(pady=20)
-
-root.mainloop()
+    def on_show_graph(self, g_type):
+        filename = self.controller.generate_graph(g_type)
+        if filename:
+            img = Image.open(filename).resize((800, 450))
+            img_tk = ImageTk.PhotoImage(img)
+            self.graph_label.config(image=img_tk)
+            self.graph_label.image = img_tk
+        else:
+            messagebox.showwarning("No Data", "Add students first")
