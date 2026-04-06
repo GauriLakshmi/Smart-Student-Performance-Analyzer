@@ -85,10 +85,15 @@ class Analyzer:
                 grades_dist[grade] = grades_dist.get(grade, 0) + 1
                 student_scores[s.name] = mark
 
+            sorted_valid = sorted(valid_students, key=get_sub_val, reverse=True)
+            top_3 = [(s.name, get_sub_val(s)) for s in sorted_valid[:3]]
+
             return {
                 "student_avgs": student_scores,
                 "subject_avg": self.calculate_subject_average(),
                 "topper": top_s.name,
+                "topper_score": get_sub_val(top_s),
+                "top_3": top_3,
                 "lowest": low_s.name,
                 "pass_fail": (pass_c, fail_c),
                 "pass_list": pass_list,
@@ -100,10 +105,19 @@ class Analyzer:
         pass_list = [(s.name, s.get_average()) for s in self.students if s.get_result() == "Pass"]
         fail_list = [(s.name, s.get_average()) for s in self.students if s.get_result() == "Fail"]
 
+        sorted_students = sorted(self.students, key=lambda s: s.get_average(), reverse=True)
+        top_3 = [(s.name, s.get_average()) for s in sorted_students[:3]]
+
+        topper_obj = self.find_topper() if self.students else None
+        topper_name = topper_obj.name if topper_obj else None
+        topper_score = topper_obj.get_average() if topper_obj else None
+
         return {
             "student_avgs": self.get_student_averages(),
             "subject_avg": self.calculate_subject_average(),
-            "topper": self.find_topper().name if self.students else None,
+            "topper": topper_name,
+            "topper_score": topper_score,
+            "top_3": top_3,
             "lowest": self.find_lowest().name if self.students else None,
             "pass_fail": self.count_pass_fail(),
             "pass_list": pass_list,

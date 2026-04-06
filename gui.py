@@ -35,7 +35,7 @@ class StudentAnalyzerApp:
         self.main_container.pack(fill="both", expand=True)
 
         # 📱 LEFT SIDEBAR (Data Input)
-        self.sidebar = tk.Frame(self.main_container, bg="#0b1121", width=320)
+        self.sidebar = tk.Frame(self.main_container, bg="#0b1121", width=340)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
         
@@ -53,8 +53,24 @@ class StudentAnalyzerApp:
         self.entry_name = tk.Entry(name_container, font=("Segoe UI", 10), width=15)
         self.entry_name.pack(side="left", fill="x", expand=True, padx=(10, 0))
 
-        self.subjects_container = tk.Frame(self.input_card, bg=CARD)
-        self.subjects_container.pack(fill="x", pady=10)
+        self.subjects_wrapper = tk.Frame(self.input_card, bg=CARD)
+        self.subjects_wrapper.pack(fill="x", pady=10)
+        
+        self.sub_canvas = tk.Canvas(self.subjects_wrapper, bg=CARD, highlightthickness=0, height=140)
+        self.sub_scroll = ttk.Scrollbar(self.subjects_wrapper, orient="vertical", command=self.sub_canvas.yview)
+        self.subjects_container = tk.Frame(self.sub_canvas, bg=CARD)
+        
+        self.subjects_container.bind("<Configure>", lambda e: self.sub_canvas.configure(scrollregion=self.sub_canvas.bbox("all")))
+        self.sub_canvas_window = self.sub_canvas.create_window((0, 0), window=self.subjects_container, anchor="nw")
+        
+        def on_sub_canvas_config(event):
+            self.sub_canvas.itemconfig(self.sub_canvas_window, width=event.width)
+            
+        self.sub_canvas.bind("<Configure>", on_sub_canvas_config)
+        self.sub_canvas.configure(yscrollcommand=self.sub_scroll.set)
+        
+        self.sub_canvas.pack(side="left", fill="both", expand=True)
+        self.sub_scroll.pack(side="right", fill="y")
 
         self.add_sub_btn = tk.Button(self.input_card, text="➕ Add Subject Row", bg="#475569", fg="white", 
                                     font=("Segoe UI", 9, "bold"), command=self.add_subject_row, 
@@ -108,9 +124,14 @@ class StudentAnalyzerApp:
         self.table_container = tk.Frame(self.content_holder, bg=BG)
         self.table_container.pack(fill="x")
 
-        self.table = ttk.Treeview(self.table_container, columns=("Name", "Avg"), show="headings", height=8)
+        self.table_scroll = ttk.Scrollbar(self.table_container, orient="vertical")
+        self.table_scroll.pack(side="right", fill="y")
+
+        self.table = ttk.Treeview(self.table_container, columns=("Name", "Avg"), show="headings", height=8, yscrollcommand=self.table_scroll.set)
+        self.table_scroll.config(command=self.table.yview)
+        
         self.update_table_headers()
-        self.table.pack(fill="x")
+        self.table.pack(side="left", fill="x", expand=True)
 
         # --- GRAPHS & FILTERS ---
         tk.Label(self.content_holder, text="📈 Performance Visualizations", font=("Segoe UI", 14, "bold"), bg=BG, fg=TEXT).pack(anchor="w", pady=(40, 10))
@@ -143,11 +164,27 @@ class StudentAnalyzerApp:
         
         tk.Label(self.list_frame, text="List of students:", bg=CARD, fg=TEXT, font=("Segoe UI", 11, "bold")).pack(side="left", padx=5)
         self.list_var = tk.StringVar(value="Select...")
-        self.list_dropdown = ttk.Combobox(self.list_frame, textvariable=self.list_var, values=["Select...", "Pass", "Fail"], state="readonly", font=("Segoe UI", 10), width=10)
+        self.list_dropdown = ttk.Combobox(self.list_frame, textvariable=self.list_var, values=["Select...", "Top 3", "Pass", "Fail"], state="readonly", font=("Segoe UI", 10), width=10)
         self.list_dropdown.pack(side="left", padx=5)
         self.list_dropdown.bind("<<ComboboxSelected>>", self.on_list_filter_change)
 
-        self.graph_info_text = tk.Text(self.graph_display_card, bg="#1e293b", fg=TEXT, font=("Segoe UI", 11), height=6, wrap="word", relief="flat")
+        self.list_view_container = tk.Frame(self.graph_display_card, bg=CARD)
+        
+        self.list_view_scroll = ttk.Scrollbar(self.list_view_container, orient="vertical")
+        self.list_view_scroll.pack(side="right", fill="y")
+        
+        self.list_table = ttk.Treeview(self.list_view_container, columns=("No", "Name", "Marks"), show="headings", height=5, yscrollcommand=self.list_view_scroll.set)
+        self.list_view_scroll.config(command=self.list_table.yview)
+        
+        self.list_table.heading("No", text="#")
+        self.list_table.heading("Name", text="Student Name")
+        self.list_table.heading("Marks", text="Marks")
+        
+        self.list_table.column("No", width=40, anchor="center")
+        self.list_table.column("Name", width=300, anchor="w")
+        self.list_table.column("Marks", width=100, anchor="center")
+        
+        self.list_table.pack(side="left", fill="both", expand=True)
 
     def create_stat_card(self, title, init_val, bg_color):
         card = tk.Frame(self.stats_frame, bg=bg_color, padx=20, pady=15)
@@ -173,22 +210,33 @@ class StudentAnalyzerApp:
         
         self.stat_students.config(text=str(total))
         self.stat_passrate.config(text=f"{pass_rate:.1f}%")
-        self.stat_topper.config(text=topper.upper() if topper else "N/A")
+        topper_score = res.get("topper_score", 0)
+        
+        if topper:
+            topper_text = f"{topper.upper()} ({round(topper_score, 1)})"
+            if len(topper_text) > 12:
+                self.stat_topper.config(font=("Segoe UI", 15, "bold"))
+            else:
+                self.stat_topper.config(font=("Segoe UI", 20, "bold"))
+            self.stat_topper.config(text=topper_text)
+        else:
+            self.stat_topper.config(font=("Segoe UI", 20, "bold"))
+            self.stat_topper.config(text="N/A")
 
     def add_subject_row(self, sub_name="", sub_mark=""):
         """Adds a new row with Subject Name and Marks entries."""
         row_frame = tk.Frame(self.subjects_container, bg=CARD)
         row_frame.pack(fill="x", pady=5)
 
-        tk.Label(row_frame, text="Subject:", bg=CARD, fg=TEXT, font=("Segoe UI", 12, "bold"), width=12, anchor="w").pack(side="left", padx=(5, 10))
-        sub_entry = tk.Entry(row_frame, font=("Segoe UI", 11), width=20)
+        tk.Label(row_frame, text="Subject:", bg=CARD, fg=TEXT, font=("Segoe UI", 10, "bold")).pack(side="left", padx=(2, 2))
+        sub_entry = tk.Entry(row_frame, font=("Segoe UI", 10), width=10)
         sub_entry.insert(0, sub_name)
-        sub_entry.pack(side="left", padx=10)
+        sub_entry.pack(side="left", padx=2)
 
-        tk.Label(row_frame, text="Marks:", bg=CARD, fg=TEXT, font=("Segoe UI", 12, "bold")).pack(side="left", padx=5)
-        mark_entry = tk.Entry(row_frame, font=("Segoe UI", 11), width=10)
+        tk.Label(row_frame, text="Mark:", bg=CARD, fg=TEXT, font=("Segoe UI", 10, "bold")).pack(side="left", padx=2)
+        mark_entry = tk.Entry(row_frame, font=("Segoe UI", 10), width=4)
         mark_entry.insert(0, str(sub_mark))
-        mark_entry.pack(side="left", padx=10)
+        mark_entry.pack(side="left", padx=2)
 
         # Delete button for row
         def remove_row():
@@ -196,8 +244,8 @@ class StudentAnalyzerApp:
             row_frame.destroy()
 
         del_btn = tk.Button(row_frame, text="✕", bg="#ef4444", fg="white", font=("Segoe UI", 8, "bold"), 
-                           command=remove_row, relief="flat", cursor="hand2", padx=5)
-        del_btn.pack(side="left", padx=10)
+                           command=remove_row, relief="flat", cursor="hand2", padx=2)
+        del_btn.pack(side="left", padx=(5,0))
 
         self.subject_rows.append((sub_entry, mark_entry))
 
@@ -316,7 +364,7 @@ class StudentAnalyzerApp:
     def on_list_filter_change(self, event=None):
         selection = self.list_var.get()
         if selection == "Select...":
-            self.graph_info_text.pack_forget()
+            self.list_view_container.pack_forget()
             return
             
         subj = self.subject_var.get()
@@ -326,25 +374,31 @@ class StudentAnalyzerApp:
         if not res:
             return messagebox.showwarning("Warning", "No data available")
 
-        self.graph_info_text.pack(fill="x", pady=(5, 0))
-        self.graph_info_text.config(state="normal")
-        self.graph_info_text.delete(1.0, tk.END)
+        self.list_view_container.pack(fill="x", pady=(5, 0))
+        
+        # Clear existing items
+        for item in self.list_table.get_children():
+            self.list_table.delete(item)
         
         if selection == "Pass":
             st_list = res.get("pass_list", [])
-            icon = "✅ PASSED"
-        else:
+        elif selection == "Fail":
             st_list = res.get("fail_list", [])
-            icon = "❌ FAILED"
+        elif selection == "Top 3":
+            st_list = res.get("top_3", [])
+        else:
+            st_list = []
             
         if not st_list:
-            display_text = f"{icon} STUDENTS:\nNone"
+            self.list_table.insert("", "end", values=("-", f"No {selection} students", "-"))
         else:
-            lines = [f"• {name} (Marks: {round(mark, 2)})" for name, mark in st_list]
-            display_text = f"{icon} STUDENTS:\n" + "\n".join(lines)
-            
-        self.graph_info_text.insert(tk.END, display_text)
-        self.graph_info_text.config(state="disabled")
+            for idx, (name, mark) in enumerate(st_list, 1):
+                if selection == "Top 3":
+                    medal = "🥇 " if idx == 1 else "🥈 " if idx == 2 else "🥉 "
+                    display_name = f"{medal}{name}"
+                else:
+                    display_name = name
+                self.list_table.insert("", "end", values=(idx, display_name, round(mark, 2)))
 
     def on_show_graph(self, g_type):
         subj = self.subject_var.get()
