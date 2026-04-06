@@ -2,7 +2,7 @@ import pandas as pd
 import os
 from models import Student
 from analyzer import Analyzer
-from graphs import plot_subject_avg, plot_pass_fail, plot_student_trend
+from graphs import plot_subject_avg, plot_pass_fail, plot_student_trend, plot_grade_distribution
 
 class StudentController:
     def __init__(self):
@@ -15,6 +15,9 @@ class StudentController:
             df = pd.read_csv(file_path)
             if "Name" not in df.columns:
                 return False, "CSV must contain a 'Name' column"
+                
+            # Fill empty values with 0 so averages don't break with NaNs
+            df.fillna(0, inplace=True)
 
             # Identify subjects (Numeric columns excluding Roll No, ID, etc)
             excluded = ["Roll No", "id", "Name", "ID", "Roll Number"]
@@ -41,16 +44,16 @@ class StudentController:
         self.students.append(s)
         return s
 
-    def get_analysis_results(self):
+    def get_analysis_results(self, subject=None):
         """Runs the full analysis on current students."""
         if not self.students:
             return None
         analyzer = Analyzer(self.students)
-        return analyzer.get_full_analysis()
+        return analyzer.get_full_analysis(subject)
 
-    def generate_graph(self, g_type):
+    def generate_graph(self, g_type, subject=None):
         """Generates a graph and returns the filename."""
-        res = self.get_analysis_results()
+        res = self.get_analysis_results(subject)
         if not res:
             return None
 
@@ -64,6 +67,9 @@ class StudentController:
         elif g_type == "trend":
             plot_student_trend(res["student_avgs"])
             filename = "student_trend.png"
+        elif g_type == "grade_dist":
+            plot_grade_distribution(res["grade_dist"])
+            filename = "grade_distribution.png"
         
         return filename if filename and os.path.exists(filename) else None
 
@@ -79,8 +85,9 @@ class StudentController:
         for s in self.students:
             row = {"Name": s.name}
             row.update(s.marks)
-            row["Average"] = round(s.average, 2)
+            row["Average"] = round(s.get_average(), 2)
             row["Grade"] = s.get_grade()
+            row["Status"] = s.get_result()
             export_data.append(row)
 
         df = pd.DataFrame(export_data)

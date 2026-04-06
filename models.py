@@ -1,51 +1,47 @@
 class Student:
     def __init__(self, name, marks):
+        """
+        name: string
+        marks: dictionary {subject: marks}
+        """
         self.name = name
         self.marks = marks
-        self.average = self.calculate_average()
 
-    def calculate_average(self):
+    def get_average(self):
+        """Calculate and return average marks"""
         if not self.marks:
             return 0
         return sum(self.marks.values()) / len(self.marks)
 
     def get_result(self):
-        return "Pass" if self.average >= 40 else "Fail"
+        """Return Pass or Fail based on average"""
+        return "Pass" if self.get_average() >= 40 else "Fail"
 
+    def get_grade(self):
+        """Return grade based on average"""
+        avg = self.get_average()
 
-class Analyzer:
-    def __init__(self, students):
-        self.students = students
+        if avg >= 90:
+            return 'A+'
+        elif avg >= 80:
+            return 'A'
+        elif avg >= 70:
+            return 'B'
+        elif avg >= 60:
+            return 'C'
+        elif avg >= 50:
+            return 'D'
+        elif avg >= 40:
+            return 'E'
+        else:
+            return 'F'
 
-    def get_student_averages(self):
-        return {s.name: s.average for s in self.students}
-
-    def calculate_subject_average(self):
-        subject_totals = {}
-        subject_counts = {}
-
-        for student in self.students:
-            for subject, mark in student.marks.items():
-                subject_totals[subject] = subject_totals.get(subject, 0) + mark
-                subject_counts[subject] = subject_counts.get(subject, 0) + 1
-
+    def to_dict(self):
+        """Optional: Convert student data to dictionary (useful for CSV/JSON)"""
         return {
-            sub: subject_totals[sub] / subject_counts[sub]
-            for sub in subject_totals
-        }
-
-    def find_topper(self):
-        return max(self.students, key=lambda s: s.average)
-
-    def count_pass_fail(self):
-        pass_count = sum(1 for s in self.students if s.get_result() == "Pass")
-        fail_count = sum(1 for s in self.students if s.get_result() == "Fail")
-        return pass_count, fail_count
-
-    def get_full_analysis(self):
-        return {
-            "student_avgs": self.get_student_averages(),
-            "subject_avg": self.calculate_subject_average(),
-            "topper": self.find_topper().name,
-            "pass_fail": self.count_pass_fail()
+            "name": self.name,
+            "marks": self.marks,
+            "average": self.get_average(),
+            "result": self.get_result(),
+            "grade": self.get_grade()
         }
