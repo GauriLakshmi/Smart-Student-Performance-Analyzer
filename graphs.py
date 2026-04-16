@@ -12,6 +12,7 @@ def plot_subject_avg(subject_avg):
     plt.bar(subjects, averages, color='skyblue')
     plt.xlabel("Subjects")
     plt.ylabel("Average Marks")
+    plt.ylim(0, 100)
     plt.title("Subject-wise Average")
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()

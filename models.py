@@ -22,6 +22,8 @@ class Student:
         avg = self.get_average()
 
         if avg >= 90:
+            return 'S'
+        elif avg >= 85:
             return 'A+'
         elif avg >= 80:
             return 'A'
